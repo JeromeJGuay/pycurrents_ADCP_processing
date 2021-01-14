@@ -33,8 +33,7 @@ import pycurrents.adcp.transform as transform
 import gsw
 import pycurrents_ADCP_processing.add_var2nc as add_var2nc
 
-
-def mean_orientation(orientation):
+def mean_orientation(orientation: Array['N,1', bool]) -> str:
     """Computes the average orientation of the ADCP.
 
     Returns a str either "up" or "down".
