@@ -2,6 +2,9 @@
 author: Hana Hourston
 date: Jan. 23, 2020
 
+Modified version by jerome.guay@dfo-mpo.gc.ca
+Date January 2021
+
 about: This script is adapted from Jody Klymak's at https://gist.github.com/jklymak/b39172bd0f7d008c81e32bf0a72e2f09
 for L1 processing raw ADCP data.
 
@@ -31,12 +34,43 @@ import gsw
 import pycurrents_ADCP_processing.add_var2nc as add_var2nc
 
 
-def mean_orientation(o):
+def mean_orientation(orientation):
+    """Computes the average orientation of the ADCP.
+
+    Returns a str either "up" or "down".
+
+    Parameters
+    ----------
+    orientation : array_like(dtype=?, ndim=?) or 1-D sequence of bools?
+        array containing bools?
+
+    Returns
+    -------
+    out : str, "up" or "down"
+        `up` if there is more True than False in orientation.
+        `down` is return if there is more False than True in `orientation`. 
+
+    Raises
+    ------
+    ValueError:
+        If the count of True egual the count of False, the adcp is neither upward of downward.
+
+    Mofications
+    -----------
+    m_orientation = np.mean(orientation)
+    if m_orientation > .5:
+        return 'up'
+    elif m_orientation < .5:
+        return 'down'
+    else:
+        ValueError('Number of \"up\" orientations equals number of \"down\" orientations in data subset')
+    """
+    #def mean_orientation(o):
     # orientation, o, is an array
     up = 0
     down = 0
-    for i in range(len(o)):
-        if o[i]:
+    for i in range(len(orientation)):
+        if orientation[i]:
             up += 1
         else:
             down += 1
@@ -48,7 +82,45 @@ def mean_orientation(o):
         ValueError('Number of \"up\" orientations equals number of \"down\" orientations in data subset')
 
 
-def correct_true_north(measured_east, measured_north, metadata_dict):  # change angle to negative of itself
+def correct_true_north(measured_east, measured_north, metadata_dict):
+    """Covert coordiniates from magnetic to geographic.
+
+    Returns two ?-D arrays_like with corrected coordinates and  appends to the
+    `metadata_dict['processing_history']` element.
+
+    The coordinates are measured in decimal degrees in a East(x)-North(y) frame
+    of reference. The magnetic coordinate are rotated using the magnectic declination
+    angle `metadata['magnectic_declination']`. The magnectic delination is measured
+    from the geographic frame of reference in decimal degrees.
+
+    Parameters
+    ----------
+    measured_east : ndrray
+        1-D array containing the east coordinates measured by the ADCP.
+
+    Measured_North :ndarray
+        1-D array containing the east coordinates measured by the ADCP.
+
+    Metadata_dict : dict of {str : str or float or int ? }
+        metedata_dict containing the `magnetic_variation`.
+
+    Returns
+    -------
+    east_true : ndarray
+       1-D array  containing the corrected east coordinates
+    north_true : ndarray
+       1-D array  containing the corrected east coordinates
+
+    Modifications
+    -------------
+    R = lambda x : np.array([[np.cos(x), -np.sin(x)],
+                             [np.sin(x), np.cos(x)]])
+
+    angle_rad = - np.radians(metadata_dict['magnetic_variation'])
+
+    true_east, true_north = np.split(np.dot(R(angle_rad), [measured_east, measured_north]), 2)
+    """
+    # change angle to negative of itself
     # Di Wan's magnetic declination correction code: Takes 0 DEG from E-W axis
     # mag_decl: magnetic declination value; float type
     # measured_east: measured Eastward velocity data; array type
@@ -64,6 +136,33 @@ def correct_true_north(measured_east, measured_north, metadata_dict):  # change 
 
 
 def convert_time_var(time_var, number_of_profiles, metadata_dict, origin_year, time_csv):
+    """Covert time recorded time to pandas time.
+
+    Returns
+
+    ..more..
+
+    Parameters
+    ----------
+    time_var :
+
+    number_of_profiles :
+
+    metadata_dict :
+
+    origin_year :
+
+    time_csv :
+
+    Returns
+    -------
+    t_s :
+
+    t_DTUT8601 :
+
+    Modifications
+    -------------
+    """
     # Includes exception handling for bad times
     # time_var: vel.dday; time variable with units in days since the beginning of the year in which measurements 
     #           started being taken by the instrument
