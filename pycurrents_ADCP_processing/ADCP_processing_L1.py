@@ -96,7 +96,7 @@ def mean_orientation(orientation: NDArray[Any, np.bool]) -> str:
 def correct_true_north(
     measured_east: NDArray[Any, float], measured_north: NDArray[Any, float],
     metadata_dict: Dict[str, Any]
-) -> Tuple(NDArray[Any, float], NDArray[Any, float]):
+) -> Tuple[NDArray[Any, float], NDArray[Any, float]]:
     """Covert coordiniates from magnetic to geographic.
 
     Returns two 2 ndarray with corrected coordinates and  appends to the
@@ -154,9 +154,9 @@ def correct_true_north(
 
 
 def convert_time_var(
-        time_var: float, number_of_profiles: int,
+        time_var: NDArray[Any, float], number_of_profiles: int,
         metadata_dict: Dict[str, Any], origin_year: int, time_csv: str
-) -> Tuple[NDArray[Any, np.datetime64], [NDArray[Any, str]]]:
+) -> Tuple[NDArray[Any, np.datetime64], NDArray[Any, str]]:
     """Covert time recorded time to pandas time (np.datetime64[s]).
 
     Returns the sampling times in datetime64[s] and in string '%Y-%m-%d %H:%M:%S'
