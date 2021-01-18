@@ -1570,8 +1570,12 @@ def nc_create_L1(inFile, file_meta, dest_dir, start_year=None, time_file=None):
         vel.FL.FWR)  # firmwareVersion
     out.attrs['frequency'] = str(data.sysconfig['kHz'])
     out.attrs['beam_angle'] = str(fixed_leader.sysconfig['angle'])  # beamAngle
-    out.attrs['systemConfiguration'] = bin(
-        fixed_leader.FL['SysCfg'])[-8:] + '-' + bin(
+    #MODIFICATION JJG
+     #out.attrs['systemConfiguration'] = bin(
+     #    fixed_leader.FL['SysCfg'])[-8:] + '-' + bin(
+     #        fixed_leader.FL['SysCfg'])[:9].replace('b', '')
+    out.attrs['systemConfiguration'] = "LSB: "bin(
+            fixed_leader.FL['SysCfg'])[-8:] + ', "MSB: "' + bin(
             fixed_leader.FL['SysCfg'])[:9].replace('b', '')
     out.attrs['sensor_source'] = '{0:08b}'.format(vel.FL['EZ'])  # sensorSource
     out.attrs['sensors_avail'] = '{0:08b}'.format(
