@@ -52,7 +52,8 @@ def mean_orientation(orientation: NDArray[Any, np.bool]) -> str:
 
     Returns
     -------
-    out :
+
+p    out :
         "up" if there is more True than False in orientation.
         "down" is return if there is more False than True in `orientation`. 
 
@@ -157,7 +158,7 @@ def convert_time_var(
         time_var: NDArray[Any, float], number_of_profiles: int,
         metadata_dict: Dict[str, Any], origin_year: int, time_csv: str
 ) -> Tuple[NDArray[Any, np.datetime64], NDArray[Any, str]]:
-    """Covert time recorded time to pandas time (np.datetime64[s]).
+    """Convert time recorded time to pandas time (np.datetime64[s]).
 
     Returns the sampling times in datetime64[s] and in string '%Y-%m-%d %H:%M:%S'
     appends to the `metadata_dict['processing_history']` element.
@@ -252,18 +253,51 @@ def convert_time_var(
     return t_s, t_DTUT8601
 
 
-def assign_pres(vel_var, metadata_dict):
+def assign_pres(vel_var, metadata_dict: Dict[str,
+                                             Any]) -> NDArray[Any, np.float32]:
+    """ FIXME
+
+    Returns
+
+    For  wh, os, sv models converts the pressure from decapascal to decibars
+
+    Parameters
+    ----------
+        vel_var : pycurrents BBWHOS class object 
+            rawfile("file.000").read(varlist= ['vel']) containing 'Pressure'.
+
+        metadata_dict :
+            ADCP metadata containing 'model'.
+    Returns
+    -------
+        pres :
+            Time series of the pressures measured by the ADCP
+    Raises
+    ------
+
+    Modifications
+    -------------
+    # More than one function.
+    """
+
     # Assign pressure and calculate it froms static instrument depth if ADCP missing pressure sensor
     # vel_var: "vel" variable created from BBWHOS class object, using the command: data.read(varlist=['vel'])
     # metadata_dict: dictionary object of metadata items
 
-    if metadata_dict['model'] == 'wh' or metadata_dict[
-            'model'] == 'os' or metadata_dict['model'] == 'sv':
-        pres = np.array(vel_var.VL['Pressure'] / 1000,
-                        dtype='float32')  # convert decapascal to decibars
+    if metadata_dict['model'] == 'wh' or\
+       metadata_dict['model'] == 'os' or \
+       metadata_dict['model'] == 'sv':
+        pres = np.array(
+            vel_var.VL['Pressure'] / 1000, dtype='float32'
+        )  # convert decapascal to decibars (JJG: SHOULD BE A SEPARATE FUNCTION)
+        # (JJG pretty sure vel_val is already a NDArray)
 
-        # Calculate pressure based on static instrument depth if missing pressure sensor; extra condition added for zero pressure or weird pressure values
+        #(JJG: SOMEWHAT USELESS IF NOT IN A LOG)
+        # Calculate pressure based on static instrument depth if missing pressure sensor; \
+        # extra condition added for zero pressure or weird pressure values
         # Handle no unique modes from statistics.mode(pressure)
+
+        #(JJG: SHOULD BE A SEPARATE FUNCTION)
         pressure_unique, counts = np.unique(pres, return_counts=True)
         index_of_zero = np.where(pressure_unique == 0)
         print('np.max(counts):', np.max(counts), sep=' ')
@@ -285,11 +319,42 @@ def assign_pres(vel_var, metadata_dict):
         warnings.warn(
             'Pressure values calculated from static instrument depth',
             UserWarning)
-
+    #(JJG THERE IS NO ELSE, FUNCTION COULD CRASH)
     return pres
 
 
-def check_depths(pres, dist, instr_depth, water_depth):
+def check_depths(pres: NDArray[Any], dist: NDArray[Any], instr_depth,
+                 water_depth):
+    """ Check user-entered instrument_depth and compare with pressure values.
+
+    Raises warning if the difference between calculated instrument depth
+    and metadata instrument_depth exceeds 0.05% of the total water depth.
+
+    Parameters
+    ----------
+        press :
+            Pressure from assign_pressure()
+
+        dist : 
+            Distance of each bin from the ADCP
+
+        instr_depth :
+            Depth of instruement ?
+
+        water_depth :
+            Depth of water ?
+    Returns
+    -------
+        Nones 
+
+    Raises:
+    -------
+        warnings.warn
+
+    Modifications
+    -------------
+    
+    """
     # Check user-entered instrument_depth and compare with pressure values
     # pres: pressure variable; array type
     # dist: distance variable (contains distance of each bin from ADCP); array type
@@ -306,12 +371,58 @@ def check_depths(pres, dist, instr_depth, water_depth):
     return
 
 
-def coordsystem_2enu(vel_var, fixed_leader_var, metadata_dict):
+def coordsystem_2enu(vel_var, fixed_leader_var, metadata_dict: Dict[str, Any]
+) -> Tuple[NDArray[Any, float], NDArray[Any, float], NDArray[Any, float], NDArray[Any, float]]
+    """Transforms beam and xyz coordinates to enu coordinates
+
+    Returns East, North and Up velocities plus the velocity error for 4 beams ADCP.
+
+    UHDAS transform functions are used to transform for beam coordinates and xyz to east-north-up (enu).
+    which uses a three-beam solution by faking a fourth beam.
+
+    beam coordinates : Velocity measured along beam axis.
+    xyz corrdinates : Velocity in a cartesian coordinate system in the ADCP frame of refence.
+    enu coordinates : East North Up measured using the heading, pitch, roll of the ADCP.
+
+    Parameters
+    ----------
+        vel_var : pycurrents BBWHOS class object
+            rawfile("file.000").read(varlist= ['vel'])
+
+        fixed_leader_var : pycurrents BBWHOS class object
+            rawfile("file.000").read(varlist= ['FixedLeader'])
+
+        metadata_dict :
+            ADCP metadata containing 'beam_parttern'.
+
+    Returns
+    -------
+        velocity1 :
+            Velocity north
+
+        velocity2 :
+            Velocity east
+
+        velocity3 :
+            Velocity z
+
+        velocity4 :
+            Velocity error z
+
+    Raises:
+    -------
+        ValueError :
+            coordinates system no recognized.
+
+    Modifications
+    -------------
+
+    """
     # Transforms beam and xyz coordinates to enu coordinates
     # vel_var: "vel" variable created from BBWHOS class object, using the command: data.read(varlist=['vel'])
     # fixed_leader_var: "fixed_leader" variable created from BBWHOS class object, using the command: data.read(varlist=['FixedLeader'])
     # metadata_dict: dictionary object of metadata items
-    # UHDAS transform functions use a three-beam solution by faking a fourth beam
+    # UHDAS transform functions use a three-beam solution by faking a fourth beam.
 
     if vel_var.trans.coordsystem == 'beam':
         trans = transform.Transform(
@@ -1571,11 +1682,11 @@ def nc_create_L1(inFile, file_meta, dest_dir, start_year=None, time_file=None):
     out.attrs['frequency'] = str(data.sysconfig['kHz'])
     out.attrs['beam_angle'] = str(fixed_leader.sysconfig['angle'])  # beamAngle
     #MODIFICATION JJG
-     #out.attrs['systemConfiguration'] = bin(
-     #    fixed_leader.FL['SysCfg'])[-8:] + '-' + bin(
-     #        fixed_leader.FL['SysCfg'])[:9].replace('b', '')
-    out.attrs['systemConfiguration'] = "LSB: "bin(
-            fixed_leader.FL['SysCfg'])[-8:] + ', "MSB: "' + bin(
+    #out.attrs['systemConfiguration'] = bin(
+    #    fixed_leader.FL['SysCfg'])[-8:] + '-' + bin(
+    #        fixed_leader.FL['SysCfg'])[:9].replace('b', '')
+    out.attrs['systemConfiguration'] = "LSB: " + bin(
+        fixed_leader.FL['SysCfg'])[-8:] + ", MSB:  " + bin(
             fixed_leader.FL['SysCfg'])[:9].replace('b', '')
     out.attrs['sensor_source'] = '{0:08b}'.format(vel.FL['EZ'])  # sensorSource
     out.attrs['sensors_avail'] = '{0:08b}'.format(
