@@ -6,11 +6,13 @@ https://github.com/cioos-siooc/cioos-siooc_data_transform/tree/master/cioos_data
 Credit: Pramod Thupaki
 """
 
-import xarray as xr
 import glob as glob
 import os
-from pycurrents_ADCP_processing import utils
+
+import xarray as xr
 from shapely.geometry import Point
+
+from pycurrents_ADCP_processing import utils
 
 
 def add_geo(ncfile, dest_dir):
@@ -22,9 +24,11 @@ def add_geo(ncfile, dest_dir):
     data_xr.attrs['_FillValue'] = 1e35
     # Geojson definitions for IOS
     json_file = 'ios_polygons.geojson'
-    json_file = os.path.join(os.path.abspath(os.path.dirname(__file__)), json_file)
+    json_file = os.path.join(os.path.abspath(os.path.dirname(__file__)),
+                             json_file)
     polygons_dict = utils.read_geojson(json_file)
-    data_xr['geographic_area'] = utils.find_geographic_area(polygons_dict, Point(lon, lat))
+    data_xr['geographic_area'] = utils.find_geographic_area(
+        polygons_dict, Point(lon, lat))
     print(utils.find_geographic_area(polygons_dict, Point(lon, lat)))
     print(ncfile)
     # Create subdir for new netCDF file if one doesn't exist yet
@@ -54,4 +58,3 @@ def example_usage_geo():
 
     # Add geographic areas to the ncfile
     get_files(archive_dir_test)
-

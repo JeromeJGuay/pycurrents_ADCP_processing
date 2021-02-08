@@ -24,7 +24,7 @@ setuptools.setup(
         'matplotlib',
         'shapely',
         'typing',  # typing and pytying are use for docuements with typehints Added by jeromejguay
-        'pytyping',
+        'nptyping',
     ],
     packages=setuptools.find_packages(),
     package_data={'pycurrents_ADCP_processing': ['*.geojson']},

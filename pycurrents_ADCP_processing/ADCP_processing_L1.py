@@ -26,7 +26,7 @@ import csv
 import datetime
 import os
 import warnings
-from typing import Any, Dict, List, Tuple, Union
+from typing import Any, Dict, List, Tuple, Type, Union
 
 import gsw
 import numpy as np
@@ -52,8 +52,7 @@ def mean_orientation(orientation: NDArray[Any, np.bool]) -> str:
 
     Returns
     -------
-
-p    out :
+    out :
         "up" if there is more True than False in orientation.
         "down" is return if there is more False than True in `orientation`. 
 
@@ -100,42 +99,46 @@ def correct_true_north(
 ) -> Tuple[NDArray[Any, float], NDArray[Any, float]]:
     """Covert coordiniates from magnetic to geographic.
 
-    Returns two 2 ndarray with corrected coordinates and  appends to the
+    Returns two ndarrays with geographic coordinates and appends to the
     `metadata_dict['processing_history']` element.
 
-    The coordinates are measured in decimal degrees in a East(x)-North(y) frame
-    of reference. The magnetic coordinate are rotated using the magnectic declination
-    angle `metadata['magnectic_declination']`. The magnectic delination is measured
-    from the geographic frame of reference in decimal degrees.
+    The coordinates needs to be in decimal degrees and in a East(x)-North(y)
+    frame of reference. The coordinates are rotated from magnetics to geoaphics
+    using the magnectic varination angle (`metadata['magnectic_declination']`).
+    The magnectic declination needs to be measured in the geographic frame of
+    reference in decimal degrees.
+
+    [geo_east, geo_north] = R(magnectic_variation)[mag_east, mag_north]
 
     Parameters
     ----------
-    measured_east :
-        East coordinates measured by the ADCP. (Magnetic East)
+    magnetic_east :
+        East coordinates measured by the ADCP.
 
-    Measured_North :
-        North coordinates measured by the ADCP (Magnetic North).
+    magnetic_north :
+        North coordinates measured by the ADCP.
 
     Metadata_dict :
         ADCP metadata which must contain the `magnetic_variation`.
 
     Returns
     -------
-    east_true :
+    geographic_east :
        Geographic east
-    north_true :
+    geograpic_north :
        Geographic north
 
     Modifications
     -------------
+    def mag2geo(magnectic_east, magnetic_north, magnetic_variation):
     R = lambda x : np.array([[np.cos(x), -np.sin(x)],
                              [np.sin(x), np.cos(x)]])
 
-    angle_rad = - np.radians(metadata_dict['magnetic_variation'])
+    angle_rad = - np.radians(magnetic_variation)
 
-    true_east, true_north = np.split(np.dot(R(angle_rad),
-                                            [measured_east, measured_north]),
-                                     2)
+    geographic_east, geographic_north = np.split(np.dot(R(angle_rad),
+                                                        [magnetic_east, magnetic_north]),
+                                                 2)
     """
     # change angle to negative of itself
     # Di Wan's magnetic declination correction code: Takes 0 DEG from E-W axis
@@ -368,11 +371,13 @@ def check_depths(pres: NDArray[Any], dist: NDArray[Any], instr_depth,
     if (abs_difference / water_depth * 100) > 0.05:
         warnings.warn("Difference between calculated instrument depth and metadata instrument_depth " \
                       "exceeds 0.05% of the total water depth", UserWarning)
-    return
+    return None
 
 
-def coordsystem_2enu(vel_var, fixed_leader_var, metadata_dict: Dict[str, Any]
-) -> Tuple[NDArray[Any, float], NDArray[Any, float], NDArray[Any, float], NDArray[Any, float]]
+def coordsystem_2enu(
+    vel_var, fixed_leader_var, metadata_dict: Dict[str, Any]
+) -> Tuple[NDArray[Any, float], NDArray[Any, float], NDArray[Any, float],
+           NDArray[Any, float]]:
     """Transforms beam and xyz coordinates to enu coordinates
 
     Returns East, North and Up velocities plus the velocity error for 4 beams ADCP.
@@ -416,7 +421,12 @@ def coordsystem_2enu(vel_var, fixed_leader_var, metadata_dict: Dict[str, Any]
 
     Modifications
     -------------
-
+    #this need to be two function. beam2xyz and xyz2enu
+        enu_velocities dict(VelocityEast = enu[:, :, 0]
+                            VelocityNorth = enu[:, :, 2]
+                            VelocityZ = enu[:, :, 2]
+                            VelocityError = enu[:, :, 3])
+        return enu_velocities
     """
     # Transforms beam and xyz coordinates to enu coordinates
     # vel_var: "vel" variable created from BBWHOS class object, using the command: data.read(varlist=['vel'])
@@ -429,20 +439,20 @@ def coordsystem_2enu(vel_var, fixed_leader_var, metadata_dict: Dict[str, Any]
             angle=fixed_leader_var.sysconfig['angle'],
             geometry=metadata_dict['beam_pattern'])  #angle is beam angle
         xyze = trans.beam_to_xyz(vel_var.vel.data)
-        print(np.shape(xyze))
+        print(np.shape(xyze))  # Useless
         enu = transform.rdi_xyz_enu(xyze,
                                     vel_var.heading,
                                     vel_var.pitch,
                                     vel_var.roll,
                                     orientation=metadata_dict['orientation'])
     elif vel_var.trans.coordsystem == 'xyz':
-        print(np.shape(vel_var.vel.data))
+        print(np.shape(vel_var.vel.data))  # Useless
         enu = transform.rdi_xyz_enu(vel_var.vel.data,
                                     vel_var.heading,
                                     vel_var.pitch,
                                     vel_var.roll,
                                     orientation=metadata_dict['orientation'])
-        print(np.shape(enu))
+        print(np.shape(enu))  # Useless
     else:
         ValueError(
             'vel.trans.coordsystem value of {} not recognized. Conversion to enu not available.'
@@ -472,13 +482,22 @@ def coordsystem_2enu(vel_var, fixed_leader_var, metadata_dict: Dict[str, Any]
     return velocity1, velocity2, velocity3, velocity4
 
 
-def flag_pressure(pres, ens1, ens2, metadata_dict):
+def flag_pressure(pres, ens1: int, ens2: int, metadata_dict):
+    """
+    TODO  BAD THIS SETS DATA TO NAN. NO Double checking
+
+    Modifications
+    -------------
+    PRESPR01_QC_var[ens1:pres.shape[0]-ens2] == 4
+
+    """
     # pres: pressure variable; array type
     # ens1: number of leading bad ensembles from before instrument deployment; int type
     # ens2: number of trailing bad ensembles from after instrument deployment; int type
     # metadata_dict: dictionary object of metadata items
 
-    PRESPR01_QC_var = np.zeros(shape=pres.shape, dtype='float32')
+    PRESPR01_QC_var = np.zeros(shape=pres.shape,
+                               dtype='float32')  #JJG why not int4
     # 2/2 pressure
     PRESPR01_QC_var[:ens1] = 4
     if ens2 != 0:
@@ -490,14 +509,17 @@ def flag_pressure(pres, ens1, ens2, metadata_dict):
     pres[PRESPR01_QC_var == 4] = np.nan
 
     metadata_dict[
-        'processing_history'] += " Quality control flags set based on SeaDataNet flag scheme from BODC."
+        'processing_history'] += " Quality control flags set based on SeaDataNet flag scheme from BODC."  #whyios this two lines ?
     metadata_dict[
-        'processing_history'] += " Negative pressure values flagged as \"bad_data\" and set to nan\'s."
+        'processing_history'] += " Negative pressure values flagged as \"bad_data\" and set to nan\'s."  #maybe make a dict of keys ? with the str .csv ?
 
     return PRESPR01_QC_var
 
 
 def flag_velocity(ens1, ens2, number_of_cells, v1, v2, v3, v5=None):
+    """
+    TODO BAD THIS SETS DATA TO NAN. NO, just flag trailing
+    """
     # Create QC variables containing flag arrays
     # ens1: number of leading bad ensembles from before instrument deployment; int type
     # ens2: number of trailing bad ensembles from after instrument deployment; int type
@@ -507,9 +529,12 @@ def flag_velocity(ens1, ens2, number_of_cells, v1, v2, v3, v5=None):
     # v3: Upwards velocity
     # v5: Upwards velocity from Sentinel V vertical beam; only for Sentinel V instruments
 
-    LCEWAP01_QC_var = np.zeros(shape=v1.shape, dtype='float32')
-    LCNSAP01_QC_var = np.zeros(shape=v2.shape, dtype='float32')
-    LRZAAP01_QC_var = np.zeros(shape=v3.shape, dtype='float32')
+    LCEWAP01_QC_var = np.zeros(shape=v1.shape,
+                               dtype='float32')  #JJG why not int4
+    LCNSAP01_QC_var = np.zeros(shape=v2.shape,
+                               dtype='float32')  #JJG why not int4
+    LRZAAP01_QC_var = np.zeros(shape=v3.shape,
+                               dtype='float32')  #JJG why not int4
 
     for qc in [LCEWAP01_QC_var, LCNSAP01_QC_var, LRZAAP01_QC_var]:
         # 0=no_quality_control, 4=value_seems_erroneous
@@ -529,7 +554,7 @@ def flag_velocity(ens1, ens2, number_of_cells, v1, v2, v3, v5=None):
     print('Set u, v, w to nans')
     # Vertical beam velocity flagging for Sentinel V's
     if v5 is None:
-        return LCEWAP01_QC_var, LCNSAP01_QC_var, LRZAAP01_QC_var
+        return LCEWAP01_QC_var, LCNSAP01_QC_var, LRZAAP01_QC_var  # NO DOUBLE RETURNS APPEND TO UNPACKABLE CONTAINER ordered dict ?
     else:
         LRZUVP01_QC_var = np.zeros(shape=v5.shape, dtype='float32')
         for bin_num in range(number_of_cells):
@@ -548,6 +573,13 @@ def add_attrs_2vars_L1(out_obj,
                        pg_flag=0,
                        vb_flag=0,
                        vb_pg_flag=0):
+    """
+    TODO
+
+    MODIFICATIONS
+    -------------
+
+    """
     # out_obj: dataset object produced using the xarray package that will be exported as a netCDF file
     # metadata_dict: dictionary object of metadata items
     # sensor_depth: sensor depth recorded by instrument
@@ -1245,6 +1277,7 @@ def add_attrs_2vars_L1(out_obj,
 
 def create_meta_dict_L1(adcp_meta):
     """
+    TODO
     Read in a csv metadata file and output in dictionary format
     Inputs:
         - adcp_meta: csv-format file containing metadata for raw ADCP file
@@ -1253,7 +1286,7 @@ def create_meta_dict_L1(adcp_meta):
     """
     meta_dict = {}
     with open(adcp_meta) as csv_file:
-        csv_reader = csv.reader(csv_file, delimiter=',')
+        csv_reader = csv.reader(csv_file, delimiter=',')  #JJG Pandas ?
         line_count = 0
         next(csv_reader, None)  # Skip header row
         for row in csv_reader:
@@ -1285,7 +1318,9 @@ def create_meta_dict_L1(adcp_meta):
 
 
 def nc_create_L1(inFile, file_meta, dest_dir, start_year=None, time_file=None):
-
+    """
+    TODO
+    """
     # If your raw file came from a NarrowBand instrument, you must also use the create_nc_L1() start_year optional kwarg (int type)
     # If your raw file has time values out of range, you must also use the create_nc_L1() time_file optional kwarg
     # Use the time_file kwarg to read in a csv file containing time entries spanning the range of deployment and using the
@@ -1295,7 +1330,8 @@ def nc_create_L1(inFile, file_meta, dest_dir, start_year=None, time_file=None):
         os.makedirs(dest_dir)
 
     # Splice file name to get output netCDF file name
-    out_name = os.path.basename(inFile)[:-4] + '.adcp.L1.nc'
+    out_name = os.path.basename(
+        inFile)[:-4] + '.adcp.L1.nc'  #nice but needs to be a functions
     print(out_name)
     if not dest_dir.endswith('/') or not dest_dir.endswith('\\'):
         out_absolute_name = os.path.abspath(dest_dir + '/' + out_name)
@@ -1346,7 +1382,8 @@ def nc_create_L1(inFile, file_meta, dest_dir, start_year=None, time_file=None):
                        trim=True,
                        yearbase=start_year)
     else:
-        data = rawfile(inFile, meta_dict['model'], trim=True)
+        data = rawfile(inFile, meta_dict['model'],
+                       trim=True)  #you could just specifie the year anyway
     print('Read in raw data')
 
     # Extract multidimensional variables from data object:
